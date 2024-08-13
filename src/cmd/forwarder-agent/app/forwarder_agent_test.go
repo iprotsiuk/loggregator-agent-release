@@ -471,7 +471,41 @@ var _ = Describe("App", func() {
 			}
 		})
 
-		Context("when support for forwarding events as traces is not active", func() {
+		Context("when forwarding logs is not active", func() {
+			BeforeEach(func() {
+				agentCfg.EmitOTelLogs = false
+			})
+
+			It("only emits events to other destinations", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				var wg sync.WaitGroup
+				defer wg.Wait()
+				defer cancel()
+
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+
+					ticker := time.NewTicker(10 * time.Millisecond)
+					for {
+						select {
+						case <-ctx.Done():
+							ticker.Stop()
+							return
+						case <-ticker.C:
+							ingressClient.EmitLog("test log", loggregator.WithStdout())
+						}
+					}
+				}()
+
+				var e *loggregator_v2.Envelope
+				Eventually(ingressServer1.envelopes, 5).Should(Receive(&e))
+				Expect(e.GetLog().GetPayload()).To(Equal([]byte("test log")))
+				Consistently(otelLogsServer.requests, 5).ShouldNot(Receive())
+			})
+		})
+
+		Context("when support for forwarding events as logs is not active", func() {
 			BeforeEach(func() {
 				agentCfg.EmitEventsAsOTelLogs = false
 			})

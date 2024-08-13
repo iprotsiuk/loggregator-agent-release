@@ -112,20 +112,19 @@ func (w GRPCWriter) Close() error {
 }
 
 type Client struct {
-	// Batch metrics sent to OTel Collector
-	b *SignalBatcher
-	// Forward timers as traces
+	b          *SignalBatcher
 	emitTraces bool
-	// Forward events as logs
 	emitEvents bool
+	emitLogs   bool
 }
 
 // New creates a new Client that will batch metrics and logs.
-func New(w Writer, emitTraces bool, emitEvents bool) *Client {
+func New(w Writer, emitTraces bool, emitEvents bool, emitLogs bool) *Client {
 	return &Client{
 		b:          NewSignalBatcher(100, 100*time.Millisecond, w),
 		emitTraces: emitTraces,
 		emitEvents: emitEvents,
+		emitLogs:   emitLogs,
 	}
 }
 
@@ -155,6 +154,9 @@ func (c *Client) Close() error {
 
 // writeCounter translates a loggregator v2 Counter to OTLP and adds the metric to the pending batch.
 func (c *Client) writeLog(e *loggregator_v2.Envelope) {
+	if !c.emitLogs {
+		return
+	}
 	atts := attributes(e)
 	svrtyNumber := logspb.SeverityNumber_SEVERITY_NUMBER_UNSPECIFIED
 	switch e.GetLog().GetType() {

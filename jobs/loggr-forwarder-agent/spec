@@ -42,6 +42,10 @@ properties:
     description: "Whether to emit events as logs to OpenTelemetry Collector downstream consumers"
     default: false
 
+  emit_otel_logs:
+    description: "Whether to emit logs to OpenTelemetry Collector downstream consumers. Does not prevent events from being forwarded as logs."
+    default: false
+
   tls.ca_cert:
     description: |
       TLS loggregator root CA certificate. It is required for key/cert

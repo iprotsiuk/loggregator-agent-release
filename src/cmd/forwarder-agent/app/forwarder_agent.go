@@ -43,6 +43,7 @@ type ForwarderAgent struct {
 	debugMetrics          bool
 	emitOTelTraces        bool
 	emitEventsAsOTelLogs  bool
+	emitOTelLogs          bool
 }
 
 type Metrics interface {
@@ -75,6 +76,7 @@ func NewForwarderAgent(
 		debugMetrics:          cfg.MetricsServer.DebugMetrics,
 		emitOTelTraces:        cfg.EmitOTelTraces,
 		emitEventsAsOTelLogs:  cfg.EmitEventsAsOTelLogs,
+		emitOTelLogs:          cfg.EmitOTelLogs,
 	}
 }
 
@@ -98,7 +100,7 @@ func (s *ForwarderAgent) Run() {
 	}))
 
 	dests := downstreamDestinations(s.downstreamFilePattern, s.log)
-	writers := downstreamWriters(dests, s.grpc, s.m, s.emitOTelTraces, s.emitEventsAsOTelLogs, s.log)
+	writers := downstreamWriters(dests, s.grpc, s.m, s.emitOTelTraces, s.emitEventsAsOTelLogs, s.emitOTelLogs, s.log)
 	tagger := egress_v2.NewTagger(s.tags)
 	ew := egress_v2.NewEnvelopeWriter(
 		multiWriter{writers: writers},
@@ -211,13 +213,13 @@ func downstreamDestinations(pattern string, l *log.Logger) []destination {
 	return dests
 }
 
-func downstreamWriters(dests []destination, grpc GRPC, m Metrics, emitOTelTraces, emitEventsAsOTelLogs bool, l *log.Logger) []Writer {
+func downstreamWriters(dests []destination, grpc GRPC, m Metrics, emitOTelTraces, emitEventsAsOTelLogs, emitOTelLogs bool, l *log.Logger) []Writer {
 	var writers []Writer
 	for _, d := range dests {
 		var w Writer
 		switch d.Protocol {
 		case "otelcol":
-			w = otelCollectorClient(d, grpc, m, emitOTelTraces, emitEventsAsOTelLogs, l)
+			w = otelCollectorClient(d, grpc, m, emitOTelTraces, emitEventsAsOTelLogs, emitOTelLogs, l)
 		default:
 			w = loggregatorClient(d, grpc, m, l)
 		}
@@ -226,7 +228,7 @@ func downstreamWriters(dests []destination, grpc GRPC, m Metrics, emitOTelTraces
 	return writers
 }
 
-func otelCollectorClient(dest destination, grpc GRPC, m Metrics, emitTraces, emitEvents bool, l *log.Logger) Writer {
+func otelCollectorClient(dest destination, grpc GRPC, m Metrics, emitTraces, emitEvents, emitLogs bool, l *log.Logger) Writer {
 	clientCreds, err := tlsconfig.Build(
 		tlsconfig.WithInternalServiceDefaults(),
 		tlsconfig.WithIdentityFromFile(grpc.CertFile, grpc.KeyFile),
@@ -254,7 +256,7 @@ func otelCollectorClient(dest destination, grpc GRPC, m Metrics, emitTraces, emi
 		}),
 	)
 
-	dw := egress.NewDiodeWriter(context.Background(), otelcolclient.New(w, emitTraces, emitEvents), gendiodes.AlertFunc(func(missed int) {
+	dw := egress.NewDiodeWriter(context.Background(), otelcolclient.New(w, emitTraces, emitEvents, emitLogs), gendiodes.AlertFunc(func(missed int) {
 		expired.Add(float64(missed))
 	}), timeoutwaitgroup.New(time.Minute))
 
